@@ -1,0 +1,195 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model ExperimentConfig {
+  id                String   @id @default(uuid())
+  org_id            String
+  platform          String
+  randomization_unit String?
+  core_metric       String
+  guard_metric      String?
+  baseline          Float
+  mde               Float
+  alpha             Float?
+  power             Float?
+  traffic_daily     Float?
+  attrition_rate    Float?
+  sample_size_each  Int
+  recommended_days  Int
+  diagnosis         String?
+  created_by        String?
+  created_at        DateTime @default(now())
+
+  @@index([org_id, created_at])
+  @@map("experiment_configs")
+}
+
+model PlatformAccount {
+  id                  String    @id @default(uuid())
+  org_id              String
+  platform            String
+  external_account_id String
+  oauth_status        String
+  token_encrypted     String?
+  token_expires_at    DateTime?
+  last_sync_at        DateTime?
+  created_at          DateTime  @default(now())
+
+  @@unique([org_id, platform, external_account_id])
+  @@map("platform_accounts")
+}
+
+model SyncJob {
+  id                  String    @id @default(uuid())
+  org_id              String
+  platform_account_id String
+  queue_job_id        String?   @unique
+  job_type            String
+  status              String
+  cursor              String?
+  error_code          String?
+  error_message       String?
+  started_at          DateTime?
+  finished_at         DateTime?
+  created_at          DateTime  @default(now())
+
+  @@index([org_id, status, created_at(sort: Desc)])
+  @@map("sync_jobs")
+}
+
+model CreativeAsset {
+  id                     String   @id @default(uuid())
+  org_id                 String
+  platform               String
+  brand_id               String
+  experiment_external_id String?
+  asset_type             String?
+  source_url             String?
+  thumbnail_url          String?
+  duration_sec           Int?
+  metrics_jsonb          Json?
+  winner_status          String   @default("unknown")
+  version                Int      @default(1)
+  ingested_at            DateTime @default(now())
+  created_at             DateTime @default(now())
+  updated_at             DateTime @updatedAt
+
+  @@index([org_id, brand_id, platform])
+  @@index([org_id, winner_status])
+  @@map("creative_assets")
+}
+
+model LabelTask {
+  id            String    @id @default(uuid())
+  org_id        String
+  queue_job_id  String?   @unique
+  status        String
+  asset_count   Int
+  progress      Int       @default(0)
+  created_by    String?
+  error_code    String?
+  error_message String?
+  created_at    DateTime  @default(now())
+  started_at    DateTime?
+  finished_at   DateTime?
+
+  @@index([org_id, status, created_at(sort: Desc)])
+  @@map("label_tasks")
+}
+
+model AssetLabel {
+  id              String   @id @default(uuid())
+  org_id          String
+  asset_id        String
+  label_dimension String
+  label_value     String
+  source          String
+  confidence      Float?
+  is_final        Boolean
+  updated_by      String?
+  updated_at      DateTime @updatedAt
+
+  @@unique([asset_id, label_dimension, label_value, is_final])
+  @@index([org_id, asset_id])
+  @@map("asset_labels")
+}
+
+model InsightReport {
+  id            String    @id @default(uuid())
+  org_id        String
+  queue_job_id  String?   @unique
+  scope_jsonb   Json?
+  asset_count   Int
+  report_tier   String
+  status        String
+  summary_text  String?
+  report_jsonb  Json?
+  pdf_url       String?
+  created_by    String?
+  error_code    String?
+  error_message String?
+  created_at    DateTime  @default(now())
+  started_at    DateTime?
+  finished_at   DateTime?
+
+  @@index([org_id, created_at(sort: Desc)])
+  @@map("insight_reports")
+}
+
+model Organization {
+  id         String   @id @default(uuid())
+  name       String
+  plan_type  String   @default("free")
+  status     String   @default("active")
+  created_at DateTime @default(now())
+
+  @@index([plan_type])
+  @@map("organizations")
+}
+
+model User {
+  id            String   @id @default(uuid())
+  org_id        String
+  email         String   @unique
+  display_name  String?
+  auth_provider String
+  created_at    DateTime @default(now())
+
+  @@index([org_id])
+  @@map("users")
+}
+
+model IdempotencyRecord {
+  id              String   @id @default(uuid())
+  org_id          String
+  endpoint        String
+  idempotency_key String
+  response_jsonb  Json
+  expires_at      DateTime
+  created_at      DateTime @default(now())
+
+  @@unique([org_id, endpoint, idempotency_key])
+  @@index([expires_at])
+  @@map("idempotency_records")
+}
+
+model AuditLog {
+  id           String   @id @default(uuid())
+  org_id       String
+  actor_user_id String?
+  action       String
+  resource_type String
+  resource_id  String?
+  request_id   String?
+  metadata     Json?
+  created_at   DateTime @default(now())
+
+  @@index([org_id, created_at(sort: Desc)])
+  @@map("audit_logs")
+}

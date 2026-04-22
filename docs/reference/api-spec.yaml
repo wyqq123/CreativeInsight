@@ -1,0 +1,822 @@
+openapi: 3.1.0
+info:
+  title: CreativeInsight MVP API
+  version: 0.2.0
+  description: |
+    API contract for CreativeInsight MVP core loop:
+    calculator -> integration sync -> winner workflow -> labeling -> insight reporting.
+servers:
+  - url: /api/v1
+security:
+  - bearerAuth: []
+tags:
+  - name: Calculator
+  - name: ExperimentConfigs
+  - name: Integrations
+  - name: SyncJobs
+  - name: Creatives
+  - name: Labeling
+  - name: Insights
+paths:
+  /calculator/estimate:
+    post:
+      tags: [Calculator]
+      summary: Estimate experiment sample size and duration
+      operationId: estimateExperiment
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CalculatorEstimateRequest"
+      responses:
+        "200":
+          description: Successful estimation
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CalculatorEstimateResponseEnvelope"
+        "400":
+          $ref: "#/components/responses/ValidationErrorResponse"
+  /experiment-configs:
+    post:
+      tags: [ExperimentConfigs]
+      summary: Save experiment configuration
+      operationId: createExperimentConfig
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ExperimentConfigCreateRequest"
+      responses:
+        "200":
+          description: Saved
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ExperimentConfigResponseEnvelope"
+        "400":
+          $ref: "#/components/responses/ValidationErrorResponse"
+  /integrations/oauth/{platform}/callback:
+    post:
+      tags: [Integrations]
+      summary: OAuth callback endpoint for platform account binding
+      operationId: oauthCallback
+      parameters:
+        - name: platform
+          in: path
+          required: true
+          schema:
+            $ref: "#/components/schemas/Platform"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/OAuthCallbackRequest"
+      responses:
+        "200":
+          description: Callback processed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PlatformAccountResponseEnvelope"
+        "400":
+          $ref: "#/components/responses/ValidationErrorResponse"
+  /sync-jobs:
+    post:
+      tags: [SyncJobs]
+      summary: Create manual sync job
+      operationId: createSyncJob
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateSyncJobRequest"
+      responses:
+        "200":
+          description: Job accepted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SyncJobResponseEnvelope"
+        "409":
+          $ref: "#/components/responses/SyncAlreadyRunningResponse"
+  /sync-jobs/{id}:
+    get:
+      tags: [SyncJobs]
+      summary: Get sync job status
+      operationId: getSyncJob
+      parameters:
+        - $ref: "#/components/parameters/ResourceId"
+      responses:
+        "200":
+          description: Sync job details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SyncJobResponseEnvelope"
+        "404":
+          $ref: "#/components/responses/NotFoundResponse"
+  /creatives:
+    get:
+      tags: [Creatives]
+      summary: List creatives with filters and pagination
+      operationId: listCreatives
+      parameters:
+        - name: brandId
+          in: query
+          schema:
+            type: string
+        - name: platform
+          in: query
+          schema:
+            $ref: "#/components/schemas/Platform"
+        - name: winnerStatus
+          in: query
+          schema:
+            $ref: "#/components/schemas/WinnerStatus"
+        - name: page
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+        - name: pageSize
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+      responses:
+        "200":
+          description: Paged creative list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CreativeListResponseEnvelope"
+  /creatives/{id}/winner-status:
+    patch:
+      tags: [Creatives]
+      summary: Update creative winner status with optimistic concurrency control
+      operationId: updateWinnerStatus
+      parameters:
+        - $ref: "#/components/parameters/ResourceId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateWinnerStatusRequest"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CreativeResponseEnvelope"
+        "409":
+          $ref: "#/components/responses/VersionConflictResponse"
+  /creatives/batch/queue-labeling:
+    post:
+      tags: [Creatives]
+      summary: Queue selected creatives into labeling task pipeline
+      operationId: queueCreativesForLabeling
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/QueueLabelingRequest"
+      responses:
+        "200":
+          description: Accepted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/QueueLabelingResponseEnvelope"
+  /label-tasks:
+    post:
+      tags: [Labeling]
+      summary: Create labeling task
+      operationId: createLabelTask
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateLabelTaskRequest"
+      responses:
+        "200":
+          description: Task accepted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LabelTaskResponseEnvelope"
+  /label-tasks/{id}:
+    get:
+      tags: [Labeling]
+      summary: Get labeling task status
+      operationId: getLabelTask
+      parameters:
+        - $ref: "#/components/parameters/ResourceId"
+      responses:
+        "200":
+          description: Label task details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LabelTaskResponseEnvelope"
+        "404":
+          $ref: "#/components/responses/NotFoundResponse"
+  /labels/review/confirm-batch:
+    post:
+      tags: [Labeling]
+      summary: Confirm or modify labels in batch
+      operationId: confirmLabelsBatch
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ConfirmLabelsBatchRequest"
+      responses:
+        "200":
+          description: Confirmed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StandardResponse"
+        "207":
+          description: Partial success with conflicts
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BatchPartialResponse"
+  /insight-reports:
+    post:
+      tags: [Insights]
+      summary: Create insight report generation task
+      operationId: createInsightReport
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateInsightReportRequest"
+      responses:
+        "200":
+          description: Report task accepted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InsightReportResponseEnvelope"
+        "400":
+          $ref: "#/components/responses/ValidationErrorResponse"
+  /insight-reports/{id}:
+    get:
+      tags: [Insights]
+      summary: Get insight report status or result
+      operationId: getInsightReport
+      parameters:
+        - $ref: "#/components/parameters/ResourceId"
+      responses:
+        "200":
+          description: Insight report details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InsightReportResponseEnvelope"
+        "404":
+          $ref: "#/components/responses/NotFoundResponse"
+  /insight-reports/{id}/export-pdf:
+    post:
+      tags: [Insights]
+      summary: Export insight report as PDF (P1)
+      operationId: exportInsightReportPdf
+      parameters:
+        - $ref: "#/components/parameters/ResourceId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      responses:
+        "200":
+          description: Export accepted or existing file returned
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PdfExportResponseEnvelope"
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  parameters:
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      schema:
+        type: string
+        minLength: 8
+    ResourceId:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+  responses:
+    ValidationErrorResponse:
+      description: Input validation failed
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+          examples:
+            validation_error:
+              value:
+                requestId: req_123
+                code: VALIDATION_ERROR
+                message: baseline must be greater than 0
+                data: {}
+    NotFoundResponse:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    VersionConflictResponse:
+      description: Optimistic lock version conflict
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+          examples:
+            version_conflict:
+              value:
+                requestId: req_456
+                code: VERSION_CONFLICT
+                message: resource version mismatch
+                data:
+                  latestVersion: 8
+    SyncAlreadyRunningResponse:
+      description: A sync job is already running for this account
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+          examples:
+            sync_running:
+              value:
+                requestId: req_789
+                code: SYNC_ALREADY_RUNNING
+                message: sync already running for account
+                data:
+                  runningJobId: sj_001
+  schemas:
+    StandardResponse:
+      type: object
+      required: [requestId, code, message, data]
+      properties:
+        requestId:
+          type: string
+        code:
+          type: string
+        message:
+          type: string
+        data:
+          type: object
+          additionalProperties: true
+    ErrorResponse:
+      allOf:
+        - $ref: "#/components/schemas/StandardResponse"
+    Platform:
+      type: string
+      enum: [qianchuan, xiaohongshu, kuaishou, meta]
+    CoreMetric:
+      type: string
+      enum: [ctr, cvr, roi, cpa, roas]
+    WinnerStatus:
+      type: string
+      enum: [unknown, candidate, confirmed, excluded]
+    SyncStatus:
+      type: string
+      enum: [queued, running, success, partial_failed, failed]
+    LabelTaskStatus:
+      type: string
+      enum: [queued, running, awaiting_review, completed, failed]
+    ReportStatus:
+      type: string
+      enum: [queued, running, ready, failed]
+    CalculatorEstimateRequest:
+      type: object
+      required:
+        - platform
+        - randomizationUnit
+        - coreMetric
+        - baseline
+        - mde
+        - alpha
+        - power
+        - trafficDaily
+        - attritionRate
+        - kVariantOverControl
+      properties:
+        platform:
+          $ref: "#/components/schemas/Platform"
+        randomizationUnit:
+          type: string
+          enum: [user, session, impression, campaign]
+        coreMetric:
+          $ref: "#/components/schemas/CoreMetric"
+        guardMetric:
+          type: string
+        baseline:
+          type: number
+        mde:
+          type: number
+        alpha:
+          type: number
+        power:
+          type: number
+        trafficDaily:
+          type: number
+        attritionRate:
+          type: number
+        stdControl:
+          type: number
+        stdVariant:
+          type: number
+        kVariantOverControl:
+          type: number
+    CalculatorEstimateData:
+      type: object
+      required: [sampleSizeEach, recommendedDays, diagnosis]
+      properties:
+        sampleSizeEach:
+          type: integer
+        recommendedDays:
+          type: integer
+        diagnosis:
+          type: string
+          enum: [ready, traffic_insufficient, input_invalid]
+        notes:
+          type: array
+          items:
+            type: string
+    CalculatorEstimateResponseEnvelope:
+      allOf:
+        - $ref: "#/components/schemas/StandardResponse"
+        - type: object
+          properties:
+            data:
+              $ref: "#/components/schemas/CalculatorEstimateData"
+    ExperimentConfigCreateRequest:
+      allOf:
+        - $ref: "#/components/schemas/CalculatorEstimateRequest"
+    ExperimentConfig:
+      type: object
+      required: [id, orgId, platform, coreMetric, sampleSizeEach, recommendedDays]
+      properties:
+        id:
+          type: string
+        orgId:
+          type: string
+        platform:
+          $ref: "#/components/schemas/Platform"
+        coreMetric:
+          $ref: "#/components/schemas/CoreMetric"
+        sampleSizeEach:
+          type: integer
+        recommendedDays:
+          type: integer
+        createdAt:
+          type: string
+          format: date-time
+    ExperimentConfigResponseEnvelope:
+      allOf:
+        - $ref: "#/components/schemas/StandardResponse"
+        - type: object
+          properties:
+            data:
+              $ref: "#/components/schemas/ExperimentConfig"
+    OAuthCallbackRequest:
+      type: object
+      required: [code]
+      properties:
+        code:
+          type: string
+        state:
+          type: string
+    PlatformAccount:
+      type: object
+      required: [id, platform, oauthStatus]
+      properties:
+        id:
+          type: string
+        platform:
+          $ref: "#/components/schemas/Platform"
+        externalAccountId:
+          type: string
+        oauthStatus:
+          type: string
+          enum: [connected, expired, revoked, error]
+        tokenExpiresAt:
+          type: string
+          format: date-time
+    PlatformAccountResponseEnvelope:
+      allOf:
+        - $ref: "#/components/schemas/StandardResponse"
+        - type: object
+          properties:
+            data:
+              $ref: "#/components/schemas/PlatformAccount"
+    CreateSyncJobRequest:
+      type: object
+      required: [platformAccountId]
+      properties:
+        platformAccountId:
+          type: string
+        jobType:
+          type: string
+          enum: [manual, scheduled, backfill]
+          default: manual
+    SyncJob:
+      type: object
+      required: [id, status]
+      properties:
+        id:
+          type: string
+        status:
+          $ref: "#/components/schemas/SyncStatus"
+        errorCode:
+          type: string
+        errorMessage:
+          type: string
+        startedAt:
+          type: string
+          format: date-time
+        finishedAt:
+          type: string
+          format: date-time
+    SyncJobResponseEnvelope:
+      allOf:
+        - $ref: "#/components/schemas/StandardResponse"
+        - type: object
+          properties:
+            data:
+              $ref: "#/components/schemas/SyncJob"
+    Creative:
+      type: object
+      required: [id, platform, winnerStatus, version]
+      properties:
+        id:
+          type: string
+        brandId:
+          type: string
+        platform:
+          $ref: "#/components/schemas/Platform"
+        winnerStatus:
+          $ref: "#/components/schemas/WinnerStatus"
+        thumbnailUrl:
+          type: string
+        durationSec:
+          type: integer
+        version:
+          type: integer
+        metrics:
+          type: object
+          additionalProperties:
+            type: number
+    PageInfo:
+      type: object
+      required: [page, pageSize, total]
+      properties:
+        page:
+          type: integer
+        pageSize:
+          type: integer
+        total:
+          type: integer
+    CreativeListData:
+      type: object
+      required: [items, pageInfo]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/Creative"
+        pageInfo:
+          $ref: "#/components/schemas/PageInfo"
+    CreativeListResponseEnvelope:
+      allOf:
+        - $ref: "#/components/schemas/StandardResponse"
+        - type: object
+          properties:
+            data:
+              $ref: "#/components/schemas/CreativeListData"
+    UpdateWinnerStatusRequest:
+      type: object
+      required: [winnerStatus, lastKnownVersion]
+      properties:
+        winnerStatus:
+          $ref: "#/components/schemas/WinnerStatus"
+        lastKnownVersion:
+          type: integer
+    CreativeResponseEnvelope:
+      allOf:
+        - $ref: "#/components/schemas/StandardResponse"
+        - type: object
+          properties:
+            data:
+              $ref: "#/components/schemas/Creative"
+    QueueLabelingRequest:
+      type: object
+      required: [creativeAssetIds]
+      properties:
+        creativeAssetIds:
+          type: array
+          minItems: 1
+          items:
+            type: string
+    QueueLabelingData:
+      type: object
+      required: [acceptedCount, duplicateCount]
+      properties:
+        acceptedCount:
+          type: integer
+        duplicateCount:
+          type: integer
+        labelTaskId:
+          type: string
+    QueueLabelingResponseEnvelope:
+      allOf:
+        - $ref: "#/components/schemas/StandardResponse"
+        - type: object
+          properties:
+            data:
+              $ref: "#/components/schemas/QueueLabelingData"
+    CreateLabelTaskRequest:
+      type: object
+      required: [assetIds]
+      properties:
+        assetIds:
+          type: array
+          minItems: 1
+          items:
+            type: string
+    LabelTask:
+      type: object
+      required: [id, status, assetCount]
+      properties:
+        id:
+          type: string
+        status:
+          $ref: "#/components/schemas/LabelTaskStatus"
+        assetCount:
+          type: integer
+        errorCode:
+          type: string
+        errorMessage:
+          type: string
+    LabelTaskResponseEnvelope:
+      allOf:
+        - $ref: "#/components/schemas/StandardResponse"
+        - type: object
+          properties:
+            data:
+              $ref: "#/components/schemas/LabelTask"
+    ConfirmLabelItem:
+      type: object
+      required: [assetId, labels, lastKnownVersion]
+      properties:
+        assetId:
+          type: string
+        lastKnownVersion:
+          type: integer
+        labels:
+          type: array
+          items:
+            $ref: "#/components/schemas/Label"
+    Label:
+      type: object
+      required: [dimension, value, isFinal]
+      properties:
+        dimension:
+          type: string
+          enum: [hook, selling_point, character, emotion, visual, cta, duration]
+        value:
+          type: string
+        confidence:
+          type: number
+        source:
+          type: string
+          enum: [ai, human]
+        isFinal:
+          type: boolean
+    ConfirmLabelsBatchRequest:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/ConfirmLabelItem"
+    BatchPartialResponse:
+      allOf:
+        - $ref: "#/components/schemas/StandardResponse"
+        - type: object
+          properties:
+            data:
+              type: object
+              properties:
+                succeeded:
+                  type: integer
+                failed:
+                  type: integer
+                failures:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      assetId:
+                        type: string
+                      code:
+                        type: string
+                      message:
+                        type: string
+    CreateInsightReportRequest:
+      type: object
+      required: [scope]
+      properties:
+        scope:
+          type: object
+          required: [brandId, dateFrom, dateTo]
+          properties:
+            brandId:
+              type: string
+            platform:
+              $ref: "#/components/schemas/Platform"
+            dateFrom:
+              type: string
+              format: date
+            dateTo:
+              type: string
+              format: date
+        tier:
+          type: string
+          enum: [free, pro]
+    InsightReport:
+      type: object
+      required: [id, status, assetCount]
+      properties:
+        id:
+          type: string
+        status:
+          $ref: "#/components/schemas/ReportStatus"
+        assetCount:
+          type: integer
+        tier:
+          type: string
+          enum: [free, pro]
+        summary:
+          type: string
+        pdfUrl:
+          type: string
+    InsightReportResponseEnvelope:
+      allOf:
+        - $ref: "#/components/schemas/StandardResponse"
+        - type: object
+          properties:
+            data:
+              $ref: "#/components/schemas/InsightReport"
+    PdfExportResponseEnvelope:
+      allOf:
+        - $ref: "#/components/schemas/StandardResponse"
+        - type: object
+          properties:
+            data:
+              type: object
+              properties:
+                reportId:
+                  type: string
+                status:
+                  type: string
+                  enum: [queued, ready]
+                pdfUrl:
+                  type: string
